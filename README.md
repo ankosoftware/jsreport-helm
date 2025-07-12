@@ -88,7 +88,7 @@ The following table lists the configurable parameters of the JSReport chart and 
 | `ingress.annotations`                        | object | `{}`                                                                                           | Ingress annotations                              |
 | `ingress.hosts`                              | list   | `[{"host": "jsreport.local", "paths": [{"path": "/", "pathType": "ImplementationSpecific"}]}]` | Ingress hosts                                    |
 | `ingress.tls`                                | list   | `[]`                                                                                           | Ingress TLS configuration                        |
-| `resources`                                  | object | `{}`                                                                                           | Resource limits and requests                     |
+| `resources`                                  | object | `{"limits": {"cpu": "1000m", "memory": "2Gi"}, "requests": {"cpu": "500m", "memory": "1Gi"}}`  | Resource limits and requests                     |
 | `livenessProbe`                              | object | HTTP probe on port 5488                                                                        | Liveness probe configuration                     |
 | `readinessProbe`                             | object | HTTP probe on port 5488                                                                        | Readiness probe configuration                    |
 | `autoscaling.enabled`                        | bool   | `false`                                                                                        | Enable horizontal pod autoscaler                 |
@@ -105,10 +105,23 @@ The following table lists the configurable parameters of the JSReport chart and 
 
 The chart includes several important environment variables for JSReport configuration:
 
-- `chrome_launchOptions_args`: Chrome launch options for PDF generation
+**Chrome/Puppeteer Configuration:**
+
+- `chrome_launchOptions_args`: Chrome launch options optimized for Kubernetes
+- Additional Chrome flags for stability and security
+
+**Authentication Configuration:**
+
 - `extensions_authentication_admin_username`: Admin username (default: "admin")
 - `extensions_authentication_admin_password`: Admin password (default: "ChangeMe!Password!")
 - `extensions_authentication_cookieSession_secret`: Session secret (default: "ChangeMe!Secret!")
+
+**Performance and Stability Settings:**
+
+- `NODE_ENV`: Set to "production" for optimal performance
+- `workers_numberOfWorkers`: Number of worker processes (default: 2)
+- `workers_timeout`: Worker timeout in milliseconds (default: 120000)
+- `NODE_OPTIONS`: Node.js memory management settings
 
 **⚠️ Important Security Note**: Change the default admin password and session secret in production deployments!
 
@@ -148,6 +161,25 @@ resources:
     cpu: 500m
     memory: 1Gi
 
+# Security settings
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+  allowPrivilegeEscalation: false
+
+# Optimized environment variables
+env:
+  - name: NODE_ENV
+    value: "production"
+  - name: workers_numberOfWorkers
+    value: "2"
+  - name: NODE_OPTIONS
+    value: "--max-old-space-size=1536"
+
 ingress:
   enabled: true
   className: "nginx"
@@ -180,14 +212,21 @@ helm install jsreport jsreport-helm/jsreport -f production-values.yaml
 ### Deployment with Persistent Storage
 
 ```yaml
+# For persistent data storage
 volumes:
   - name: jsreport-data
     persistentVolumeClaim:
       claimName: jsreport-pvc
+  # Temporary volumes are automatically configured
+  - name: tmp-volume
+    emptyDir:
+      sizeLimit: 1Gi
 
 volumeMounts:
   - name: jsreport-data
     mountPath: /app/data
+  - name: tmp-volume
+    mountPath: /tmp
 ```
 
 ### Accessing JSReport
@@ -233,6 +272,40 @@ helm history my-jsreport
 helm rollback my-jsreport 1
 ```
 
+## JSReport-Specific Considerations
+
+### Resource Requirements
+
+JSReport requires significant resources due to Chrome/Puppeteer for PDF generation:
+
+- **Minimum Memory**: 1Gi (recommended: 2Gi)
+- **Minimum CPU**: 500m (recommended: 1000m)
+- **Temporary Storage**: Required for Chrome cache and temp files
+
+### Chrome/Puppeteer Configuration
+
+The chart includes optimized Chrome launch options for Kubernetes:
+
+- `--no-sandbox`: Required for running Chrome in containers
+- `--disable-dev-shm-usage`: Prevents /dev/shm size issues
+- `--disable-gpu`: Disables GPU acceleration (not needed for headless)
+- Additional flags for stability and security
+
+### Worker Configuration
+
+JSReport supports multiple worker processes for better performance:
+
+- Default: 2 workers per container
+- Workers handle PDF generation in parallel
+- Configurable timeout and port ranges
+
+### Memory Management
+
+Node.js memory settings are optimized for container environments:
+
+- `--max-old-space-size=1536`: Prevents memory issues in containers
+- Aligned with container memory limits
+
 ## Security Considerations
 
 1. **Change Default Credentials**: Always change the default admin username and password in production
@@ -240,6 +313,8 @@ helm rollback my-jsreport 1
 3. **Enable HTTPS**: Use TLS/SSL for production deployments
 4. **Resource Limits**: Set appropriate resource limits to prevent resource exhaustion
 5. **Security Context**: Configure appropriate security contexts for your environment
+6. **Non-Root User**: The chart runs as non-root user (UID 1000) by default
+7. **Capability Dropping**: All unnecessary Linux capabilities are dropped
 
 ## Troubleshooting
 

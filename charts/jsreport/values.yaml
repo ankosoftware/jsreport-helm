@@ -11,14 +11,33 @@ image:
   tag: "4.9.0-full"
 
 env:
+  # Chrome/Puppeteer configuration for Kubernetes
   - name: chrome_launchOptions_args
-    value: "--no-sandbox,--disable-dev-shm-usage,--disable-gpu"
+    value: "--no-sandbox,--disable-dev-shm-usage,--disable-gpu,--disable-extensions,--disable-plugins"
+
+  # JSReport authentication configuration
   - name: extensions_authentication_admin_username
     value: "admin"
   - name: extensions_authentication_admin_password
     value: "ChangeMe!Password!"
   - name: extensions_authentication_cookieSession_secret
     value: "ChangeMe!Secret!"
+
+  # Performance and stability settings
+  - name: NODE_ENV
+    value: "production"
+  - name: workers_numberOfWorkers
+    value: "2"
+  - name: workers_timeout
+    value: "120000"
+  - name: workers_portLeftBoundary
+    value: "1000"
+  - name: workers_portRightBoundary
+    value: "2000"
+
+  # Memory management for Node.js in containers
+  - name: NODE_OPTIONS
+    value: "--max-old-space-size=1536"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -43,13 +62,17 @@ podSecurityContext:
   # fsGroup: 2000
 
 securityContext:
-  {}
-  # capabilities:
-  #   drop:
-  #   - ALL
+  # Security settings for JSReport container
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+  allowPrivilegeEscalation: false
+  # Note: readOnlyRootFilesystem is commented out as JSReport needs write access
+  # for temporary files and Chrome cache
   # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
 
 service:
   type: ClusterIP
@@ -73,26 +96,31 @@ ingress:
   #      - chart-example.local
 
 resources:
-  {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  # limits:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+  # JSReport requires more resources due to Chrome/Puppeteer for PDF generation
+  # These are recommended minimums for stable operation
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
 
 livenessProbe:
   httpGet:
     path: /
     port: 5488
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
 readinessProbe:
   httpGet:
     path: /
     port: 5488
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
 
 autoscaling:
   enabled: false
@@ -102,17 +130,22 @@ autoscaling:
   # targetMemoryUtilizationPercentage: 80
 
 # Additional volumes on the output Deployment definition.
-volumes: []
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
+volumes:
+  # Temporary volume for JSReport and Chrome temp files
+  - name: tmp-volume
+    emptyDir:
+      sizeLimit: 1Gi
+  - name: chrome-cache
+    emptyDir:
+      sizeLimit: 512Mi
 
 # Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
-# - name: foo
-#   mountPath: "/etc/foo"
-#   readOnly: true
+volumeMounts:
+  # Mount temporary volumes for JSReport operations
+  - name: tmp-volume
+    mountPath: /tmp
+  - name: chrome-cache
+    mountPath: /home/jsreport/.cache
 
 nodeSelector: {}
 
