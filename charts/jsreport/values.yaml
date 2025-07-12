@@ -8,7 +8,7 @@ image:
   repository: jsreport/jsreport
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "4.7.0-full"
+  tag: "4.9.0-full"
 
 env:
   - name: chrome_launchOptions_args
