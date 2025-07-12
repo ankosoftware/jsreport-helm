@@ -1,0 +1,119 @@
+name: Check JSReport Version Updates
+
+on:
+  schedule:
+    # Check for updates daily at 9 AM UTC
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Get latest JSReport version
+        id: jsreport-version
+        run: |
+          LATEST_VERSION=$(npm view jsreport version)
+          echo "latest=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          echo "Latest JSReport version: $LATEST_VERSION"
+
+      - name: Get current chart version
+        id: chart-version
+        run: |
+          CURRENT_APP_VERSION=$(grep 'appVersion:' charts/jsreport/Chart.yaml | sed 's/appVersion: "\(.*\)"/\1/')
+          CURRENT_CHART_VERSION=$(grep '^version:' charts/jsreport/Chart.yaml | sed 's/version: \(.*\)/\1/')
+          echo "current_app=$CURRENT_APP_VERSION" >> $GITHUB_OUTPUT
+          echo "current_chart=$CURRENT_CHART_VERSION" >> $GITHUB_OUTPUT
+          echo "Current app version: $CURRENT_APP_VERSION"
+          echo "Current chart version: $CURRENT_CHART_VERSION"
+
+      - name: Compare versions
+        id: compare
+        run: |
+          if [ "${{ steps.jsreport-version.outputs.latest }}" != "${{ steps.chart-version.outputs.current_app }}" ]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "Version update needed: ${{ steps.chart-version.outputs.current_app }} -> ${{ steps.jsreport-version.outputs.latest }}"
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            echo "Chart is up to date"
+          fi
+
+      - name: Calculate new chart version
+        id: new-version
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          CURRENT_CHART_VERSION="${{ steps.chart-version.outputs.current_chart }}"
+          # Increment minor version for JSReport updates
+          MAJOR=$(echo $CURRENT_CHART_VERSION | cut -d. -f1)
+          MINOR=$(echo $CURRENT_CHART_VERSION | cut -d. -f2)
+          PATCH=$(echo $CURRENT_CHART_VERSION | cut -d. -f3)
+          NEW_MINOR=$((MINOR + 1))
+          NEW_CHART_VERSION="$MAJOR.$NEW_MINOR.0"
+          echo "new_chart=$NEW_CHART_VERSION" >> $GITHUB_OUTPUT
+          echo "New chart version: $NEW_CHART_VERSION"
+
+      - name: Update chart files
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          # Update Chart.yaml
+          sed -i "s/version: ${{ steps.chart-version.outputs.current_chart }}/version: ${{ steps.new-version.outputs.new_chart }}/" charts/jsreport/Chart.yaml
+          sed -i "s/appVersion: \"${{ steps.chart-version.outputs.current_app }}\"/appVersion: \"${{ steps.jsreport-version.outputs.latest }}\"/" charts/jsreport/Chart.yaml
+
+          # Update values.yaml
+          sed -i "s/tag: \"${{ steps.chart-version.outputs.current_app }}-full\"/tag: \"${{ steps.jsreport-version.outputs.latest }}-full\"/" charts/jsreport/values.yaml
+
+          # Update README.md
+          sed -i "s/\`\"${{ steps.chart-version.outputs.current_app }}-full\"\`/\`\"${{ steps.jsreport-version.outputs.latest }}-full\"\`/g" README.md
+
+      - name: Create Pull Request
+        if: steps.compare.outputs.update_needed == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            Update JSReport to version ${{ steps.jsreport-version.outputs.latest }}
+
+            - Update appVersion from ${{ steps.chart-version.outputs.current_app }} to ${{ steps.jsreport-version.outputs.latest }}
+            - Update chart version from ${{ steps.chart-version.outputs.current_chart }} to ${{ steps.new-version.outputs.new_chart }}
+            - Update Docker image tag to ${{ steps.jsreport-version.outputs.latest }}-full
+            - Update documentation
+          title: "chore: Update JSReport to version ${{ steps.jsreport-version.outputs.latest }}"
+          body: |
+            ## JSReport Version Update
+
+            This PR automatically updates the JSReport Helm chart to use the latest JSReport version.
+
+            ### Changes
+            - **JSReport Version**: `${{ steps.chart-version.outputs.current_app }}` → `${{ steps.jsreport-version.outputs.latest }}`
+            - **Chart Version**: `${{ steps.chart-version.outputs.current_chart }}` → `${{ steps.new-version.outputs.new_chart }}`
+            - **Docker Image**: `jsreport/jsreport:${{ steps.jsreport-version.outputs.latest }}-full`
+
+            ### What's Changed
+            - Updated `appVersion` in Chart.yaml
+            - Updated `version` in Chart.yaml (minor version bump)
+            - Updated Docker image tag in values.yaml
+            - Updated documentation in README.md
+
+            ### Testing
+            Please test this update in a development environment before merging.
+
+            ### Release Notes
+            Check the [JSReport release notes](https://github.com/jsreport/jsreport/releases) for details about what's new in version `${{ steps.jsreport-version.outputs.latest }}`.
+          branch: update-jsreport-${{ steps.jsreport-version.outputs.latest }}
+          delete-branch: true
+
+      - name: Output result
+        run: |
+          if [ "${{ steps.compare.outputs.update_needed }}" == "true" ]; then
+            echo "✅ Created PR to update JSReport from ${{ steps.chart-version.outputs.current_app }} to ${{ steps.jsreport-version.outputs.latest }}"
+          else
+            echo "✅ Chart is already up to date with JSReport ${{ steps.chart-version.outputs.current_app }}"
+          fi

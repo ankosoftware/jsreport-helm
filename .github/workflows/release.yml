@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  HELM_REPO_URL: https://jsreport.github.io/helm-charts
+  HELM_REPO_URL: https://ankosoftware.github.io/jsreport-helm
   CHART_PATH: .
 
 jobs:
@@ -30,6 +30,14 @@ jobs:
         uses: azure/setup-helm@v3
         with:
           version: v3.13.0
+
+      - name: Lint Helm Chart
+        run: |
+          helm lint charts/jsreport
+
+      - name: Package Helm Chart
+        run: |
+          helm package charts/jsreport
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
