@@ -8,7 +8,7 @@ image:
   repository: jsreport/jsreport
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "4.10.1-full"
+  tag: "4.11.0-full"
 
 env:
   # Chrome/Puppeteer configuration for Kubernetes

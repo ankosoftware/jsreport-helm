@@ -68,7 +68,7 @@ The following table lists the configurable parameters of the JSReport chart and 
 | `replicaCount`                               | int    | `1`                                                                                            | Number of JSReport replicas                      |
 | `image.repository`                           | string | `"jsreport/jsreport"`                                                                          | JSReport image repository                        |
 | `image.pullPolicy`                           | string | `"IfNotPresent"`                                                                               | Image pull policy                                |
-| `image.tag`                                  | string | `"4.10.1-full"`                                                                                 | JSReport image tag                               |
+| `image.tag`                                  | string | `"4.11.0-full"`                                                                                 | JSReport image tag                               |
 | `env`                                        | list   | See values.yaml                                                                                | Environment variables for JSReport configuration |
 | `imagePullSecrets`                           | list   | `[]`                                                                                           | Image pull secrets                               |
 | `nameOverride`                               | string | `""`                                                                                           | Override name of the chart                       |
