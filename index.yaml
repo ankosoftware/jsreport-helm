@@ -3,6 +3,16 @@ entries:
   jsreport:
   - apiVersion: v2
     appVersion: 4.11.0
+    created: "2025-11-28T22:19:23.718482573Z"
+    description: A Helm chart for JSReport
+    digest: 87421e03924bee82abb200df2cec517774b2378cdccd6d6c66d66ff439a98704
+    name: jsreport
+    type: application
+    urls:
+    - https://github.com/ankosoftware/jsreport-helm/releases/download/jsreport-0.4.0/jsreport-0.4.0.tgz
+    version: 0.4.0
+  - apiVersion: v2
+    appVersion: 4.11.0
     created: "2025-11-28T22:04:13.064549707Z"
     description: A Helm chart for JSReport
     digest: 3278d38e306849405af7e2229f41b8adc4610cef54b49a82ba76c7916448f4ef
@@ -51,4 +61,4 @@ entries:
     urls:
     - https://github.com/ankosoftware/jsreport-helm/releases/download/jsreport-0.0.1/jsreport-0.0.1.tgz
     version: 0.0.1
-generated: "2025-11-28T22:04:13.064569575Z"
+generated: "2025-11-28T22:19:23.718504324Z"
