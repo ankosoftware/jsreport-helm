@@ -138,6 +138,10 @@ volumes:
   - name: chrome-cache
     emptyDir:
       sizeLimit: 512Mi
+  # Logs volume for JSReport logs (required when running as non-root)
+  - name: logs-volume
+    emptyDir:
+      sizeLimit: 256Mi
 
 # Additional volumeMounts on the output Deployment definition.
 volumeMounts:
@@ -146,6 +150,9 @@ volumeMounts:
     mountPath: /tmp
   - name: chrome-cache
     mountPath: /home/jsreport/.cache
+  # Mount logs volume (required when running as non-root)
+  - name: logs-volume
+    mountPath: /app/logs
 
 nodeSelector: {}
 
