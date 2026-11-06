@@ -46,18 +46,44 @@ spec:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- with .Values.volumeMounts }}
           volumeMounts:
+            - name: data
+              mountPath: /app/data
+            {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.env }}
+            {{- end }}
           env:
+            - name: extensions_authentication_admin_username
+              value: {{ .Values.auth.adminUsername | quote }}
+            - name: extensions_authentication_admin_password
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "jsreport.authSecretName" . }}
+                  key: admin-password
+            - name: extensions_authentication_cookieSession_secret
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "jsreport.authSecretName" . }}
+                  key: cookie-secret
+            - name: trustUserCode
+              value: {{ .Values.trustUserCode | quote }}
+            - name: extensions_express_cors_enabled
+              value: {{ .Values.cors.enabled | quote }}
+            {{- with .Values.env }}
             {{- toYaml . | nindent 12 }}
-          {{- end }}
-      {{- with .Values.volumes }}
+            {{- end }}
       volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "jsreport.dataClaimName" . }}
+          {{- else }}
+          emptyDir:
+            sizeLimit: {{ .Values.persistence.emptyDirSizeLimit }}
+          {{- end }}
+        {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

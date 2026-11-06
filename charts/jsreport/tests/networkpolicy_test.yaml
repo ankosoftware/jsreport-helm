@@ -1,0 +1,104 @@
+suite: network policy
+templates:
+  - templates/networkpolicy.yaml
+tests:
+  - it: is enabled by default and restricts both directions
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+            - Egress
+      - equal:
+          path: spec.podSelector.matchLabels
+          value:
+            app.kubernetes.io/name: jsreport
+            app.kubernetes.io/instance: RELEASE-NAME
+
+  - it: allows DNS lookups
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            ports:
+              - protocol: UDP
+                port: 53
+              - protocol: TCP
+                port: 53
+
+  - it: blocks cloud metadata, link-local and private networks for IPv4 and IPv6
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock:
+                  cidr: 0.0.0.0/0
+                  except:
+                    - 10.0.0.0/8
+                    - 100.64.0.0/10
+                    - 168.63.129.16/32
+                    - 169.254.0.0/16
+                    - 172.16.0.0/12
+                    - 192.168.0.0/16
+              - ipBlock:
+                  cidr: ::/0
+                  except:
+                    - fc00::/7
+                    - fe80::/10
+
+  - it: appends extra egress rules for required internal destinations
+    set:
+      networkPolicy.egress.extraEgress:
+        - to:
+            - ipBlock:
+                cidr: 10.1.2.3/32
+          ports:
+            - protocol: TCP
+              port: 5432
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock:
+                  cidr: 10.1.2.3/32
+            ports:
+              - protocol: TCP
+                port: 5432
+
+  - it: allows ingress on the http port from any source by default
+    asserts:
+      - equal:
+          path: spec.ingress
+          value:
+            - ports:
+                - protocol: TCP
+                  port: 5488
+
+  - it: restricts ingress sources when configured
+    set:
+      networkPolicy.ingress.from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+    asserts:
+      - equal:
+          path: spec.ingress
+          value:
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: ingress-nginx
+              ports:
+                - protocol: TCP
+                  port: 5488
+
+  - it: is not rendered when disabled
+    set:
+      networkPolicy.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

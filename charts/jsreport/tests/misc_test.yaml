@@ -1,0 +1,56 @@
+suite: service account, persistence and test hook
+set:
+  auth.adminPassword: test-password
+  auth.cookieSecret: test-cookie-secret
+tests:
+  - it: does not mount the Kubernetes API token by default
+    template: templates/serviceaccount.yaml
+    asserts:
+      - equal:
+          path: automountServiceAccountToken
+          value: false
+
+  - it: does not create a claim when persistence is disabled
+    template: templates/pvc.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: creates a claim when persistence is enabled
+    template: templates/pvc.yaml
+    set:
+      persistence.enabled: true
+      persistence.size: 5Gi
+      persistence.storageClass: fast
+    asserts:
+      - isKind:
+          of: PersistentVolumeClaim
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-jsreport-data
+      - equal:
+          path: spec.resources.requests.storage
+          value: 5Gi
+      - equal:
+          path: spec.storageClassName
+          value: fast
+      - equal:
+          path: spec.accessModes
+          value:
+            - ReadWriteOnce
+
+  - it: does not create a claim when an existing claim is used
+    template: templates/pvc.yaml
+    set:
+      persistence.enabled: true
+      persistence.existingClaim: my-claim
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: uses a pinned busybox image for the connection test
+    template: templates/tests/test-connection.yaml
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].image
+          pattern: ^busybox:\d+\.\d+(\.\d+)?$

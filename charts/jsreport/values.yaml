@@ -10,30 +10,35 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   tag: "4.15.0-full"
 
+# JSReport authentication. The admin password and cookie secret are stored in a Secret.
+# Either set adminPassword and cookieSecret, or point existingSecret at a Secret that
+# contains the keys "admin-password" and "cookie-secret". Installation fails if neither is set.
+auth:
+  adminUsername: "admin"
+  adminPassword: ""
+  cookieSecret: ""
+  existingSecret: ""
+
+# When false, templates and scripts run in a locked-down sandbox: no module imports beyond
+# the allowed list and no local file access from Chrome. Only enable for fully trusted authors.
+trustUserCode: false
+
+# CORS lets browser pages on other origins call the jsreport API. Enable only if needed.
+cors:
+  enabled: false
+
+# Additional environment variables. Authentication, trustUserCode and CORS are set
+# from the values above, so overriding this list does not disable them.
 env:
   # Chrome/Puppeteer configuration for Kubernetes
   - name: chrome_launchOptions_args
     value: "--no-sandbox,--disable-dev-shm-usage,--disable-gpu,--disable-extensions,--disable-plugins"
-
-  # JSReport authentication configuration
-  - name: extensions_authentication_admin_username
-    value: "admin"
-  - name: extensions_authentication_admin_password
-    value: "ChangeMe!Password!"
-  - name: extensions_authentication_cookieSession_secret
-    value: "ChangeMe!Secret!"
 
   # Performance and stability settings
   - name: NODE_ENV
     value: "production"
   - name: workers_numberOfWorkers
     value: "2"
-  - name: workers_timeout
-    value: "120000"
-  - name: workers_portLeftBoundary
-    value: "1000"
-  - name: workers_portRightBoundary
-    value: "2000"
 
   # Memory management for Node.js in containers
   - name: NODE_OPTIONS
@@ -47,7 +52,8 @@ serviceAccount:
   # Specifies whether a service account should be created
   create: true
   # Automatically mount a ServiceAccount's API credentials?
-  automount: true
+  # JSReport does not use the Kubernetes API, so the token is not mounted by default.
+  automount: false
   # Annotations to add to the service account
   annotations: {}
   # The name of the service account to use.
@@ -57,15 +63,19 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
+# The jsreport image runs as user/group 2500 (jsreport:jsreport) and owns /app.
+# Chrome runs with --no-sandbox in containers, so the RuntimeDefault seccomp profile
+# provides the syscall filtering instead.
 podSecurityContext:
-  {}
-  # fsGroup: 2000
+  runAsNonRoot: true
+  runAsUser: 2500
+  runAsGroup: 2500
+  fsGroup: 2500
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
   # Security settings for JSReport container
-  runAsNonRoot: true
-  runAsUser: 1000
-  runAsGroup: 1000
   capabilities:
     drop:
       - ALL
@@ -138,14 +148,10 @@ volumes:
   - name: chrome-cache
     emptyDir:
       sizeLimit: 512Mi
-  # Logs volume for JSReport logs (required when running as non-root)
+  # Logs volume for JSReport logs
   - name: logs-volume
     emptyDir:
       sizeLimit: 256Mi
-  # Data volume for JSReport data storage (required when running as non-root)
-  - name: data-volume
-    emptyDir:
-      sizeLimit: 1Gi
 
 # Additional volumeMounts on the output Deployment definition.
 volumeMounts:
@@ -154,12 +160,44 @@ volumeMounts:
     mountPath: /tmp
   - name: chrome-cache
     mountPath: /home/jsreport/.cache
-  # Mount logs volume (required when running as non-root)
+  # Mount logs volume
   - name: logs-volume
     mountPath: /app/logs
-  # Mount data volume for JSReport data storage (required when running as non-root)
-  - name: data-volume
-    mountPath: /app/data
+
+# Storage for templates and other entities saved by the fs store (/app/data).
+# When disabled, an emptyDir is used and data is lost when the pod restarts.
+# A ReadWriteOnce claim can only be shared by replicas scheduled on the same node;
+# for multiple replicas use ReadWriteMany or a database-backed store.
+persistence:
+  enabled: false
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  emptyDirSizeLimit: 1Gi
+
+# NetworkPolicy for the jsreport pods. Chrome loads any http(s) URL referenced by a
+# template, so egress to cloud metadata endpoints, link-local and private networks is
+# blocked by default. Requires a CNI plugin that enforces NetworkPolicy.
+networkPolicy:
+  enabled: true
+  ingress:
+    # Sources allowed to reach the http port. Empty allows any source.
+    from: []
+  egress:
+    # Ranges excluded from internet egress (IPv4 and IPv6).
+    blockedCidrs:
+      - 10.0.0.0/8
+      - 100.64.0.0/10
+      - 168.63.129.16/32
+      - 169.254.0.0/16
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - fc00::/7
+      - fe80::/10
+    # Additional egress rules, e.g. for a database store on the private network.
+    extraEgress: []
 
 nodeSelector: {}
 

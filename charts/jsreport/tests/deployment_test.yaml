@@ -1,0 +1,176 @@
+suite: deployment security configuration
+templates:
+  - templates/deployment.yaml
+set:
+  auth.adminPassword: test-password
+  auth.cookieSecret: test-cookie-secret
+tests:
+  - it: fails when no admin password and no existing secret are provided
+    set:
+      auth.adminPassword: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "auth.adminPassword is required"
+
+  - it: fails when no cookie secret and no existing secret are provided
+    set:
+      auth.cookieSecret: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "auth.cookieSecret is required"
+
+  - it: reads admin password and cookie secret from the chart-managed secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: extensions_authentication_admin_username
+            value: admin
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: extensions_authentication_admin_password
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-jsreport
+                key: admin-password
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: extensions_authentication_cookieSession_secret
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-jsreport
+                key: cookie-secret
+
+  - it: reads credentials from an existing secret without requiring inline values
+    set:
+      auth.adminPassword: ""
+      auth.cookieSecret: ""
+      auth.existingSecret: my-jsreport-auth
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: extensions_authentication_admin_password
+            valueFrom:
+              secretKeyRef:
+                name: my-jsreport-auth
+                key: admin-password
+
+  - it: keeps authentication and hardening settings when the env list is overridden
+    set:
+      env:
+        - name: MY_VAR
+          value: "1"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MY_VAR
+            value: "1"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: extensions_authentication_admin_username
+            value: admin
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: trustUserCode
+            value: "false"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: extensions_express_cors_enabled
+            value: "false"
+
+  - it: allows trustUserCode and cors to be configured
+    set:
+      trustUserCode: true
+      cors.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: trustUserCode
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: extensions_express_cors_enabled
+            value: "true"
+
+  - it: does not set options that jsreport 4 does not support
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: workers_timeout
+            value: "120000"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: workers_portLeftBoundary
+            value: "1000"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: workers_portRightBoundary
+            value: "2000"
+
+  - it: runs as the image's jsreport user with the runtime default seccomp profile
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 2500
+            runAsGroup: 2500
+            fsGroup: 2500
+            seccompProfile:
+              type: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          value:
+            - ALL
+
+  - it: uses an emptyDir for /app/data when persistence is disabled
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            emptyDir:
+              sizeLimit: 1Gi
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data
+            mountPath: /app/data
+
+  - it: uses the chart-managed claim for /app/data when persistence is enabled
+    set:
+      persistence.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: RELEASE-NAME-jsreport-data
+
+  - it: uses an existing claim for /app/data when provided
+    set:
+      persistence.enabled: true
+      persistence.existingClaim: my-claim
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: data
+            persistentVolumeClaim:
+              claimName: my-claim

@@ -29,11 +29,16 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v3
         with:
-          version: v3.13.0
+          version: v3.22.1
 
       - name: Lint Helm Chart
         run: |
-          helm lint charts/jsreport
+          helm lint charts/jsreport --values charts/jsreport/ci/lint-values.yaml
+
+      - name: Run Helm unit tests
+        run: |
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git
+          helm unittest charts/jsreport
 
       - name: Package Helm Chart
         run: |

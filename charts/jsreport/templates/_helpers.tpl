@@ -60,3 +60,24 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Name of the Secret holding the admin password and cookie secret.
+Fails when neither an existing Secret nor inline credentials are provided.
+*/}}
+{{- define "jsreport.authSecretName" -}}
+{{- if .Values.auth.existingSecret }}
+{{- .Values.auth.existingSecret }}
+{{- else }}
+{{- $_ := required "auth.adminPassword is required (or set auth.existingSecret)" .Values.auth.adminPassword }}
+{{- $_ := required "auth.cookieSecret is required (or set auth.existingSecret)" .Values.auth.cookieSecret }}
+{{- include "jsreport.fullname" . }}
+{{- end }}
+{{- end }}
+
+{{/*
+Name of the PersistentVolumeClaim used for /app/data.
+*/}}
+{{- define "jsreport.dataClaimName" -}}
+{{- default (printf "%s-data" (include "jsreport.fullname" .)) .Values.persistence.existingClaim }}
+{{- end }}
