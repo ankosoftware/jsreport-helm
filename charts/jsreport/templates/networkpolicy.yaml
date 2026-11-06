@@ -1,0 +1,56 @@
+{{- if .Values.networkPolicy.enabled -}}
+{{- $ipv4Except := list }}
+{{- $ipv6Except := list }}
+{{- range .Values.networkPolicy.egress.blockedCidrs }}
+{{- if contains ":" . }}
+{{- $ipv6Except = append $ipv6Except . }}
+{{- else }}
+{{- $ipv4Except = append $ipv4Except . }}
+{{- end }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "jsreport.fullname" . }}
+  labels:
+    {{- include "jsreport.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "jsreport.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+      {{- with .Values.networkPolicy.ingress.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  egress:
+    # DNS, including node-local DNS caches on link-local addresses
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Internet, excluding cloud metadata endpoints, link-local and private networks
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            {{- with $ipv4Except }}
+            except:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+        - ipBlock:
+            cidr: ::/0
+            {{- with $ipv6Except }}
+            except:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+    {{- with .Values.networkPolicy.egress.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

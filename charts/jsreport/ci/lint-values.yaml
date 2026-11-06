@@ -1,0 +1,4 @@
+# Values used by CI to lint and render the chart. Not for production use.
+auth:
+  adminPassword: ci-only-password
+  cookieSecret: ci-only-cookie-secret
